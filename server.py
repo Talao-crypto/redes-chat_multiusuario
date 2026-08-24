@@ -4,7 +4,7 @@ import queue
 from datetime import datetime
 
 HOST = "127.0.0.1"  # definindo a porta e o endereço
-PORT = 5000
+PORT = 5051
 
 
 def hora_atual():
