@@ -1,12 +1,16 @@
 import socket
 import threading
 
+# Cliente que se conecta a um servidor TCP e troca linhas terminadas por '\n'.
+# Usa duas threads: uma para enviar (lê do teclado) e outra para receber.
 HOST = "127.0.0.1"
 PORT = 5051
 ENCODING = "utf-8"
 BUFFER_SIZE = 1024
 
+# Evento para sinalizar encerramento entre threads
 sair = threading.Event()
+# Buffer parcial de recebimento para montar linhas completas
 buffer_recv = ""
 
 
@@ -24,6 +28,7 @@ def receber_linha(sock):
 
 
 def thread_enviar(sock):
+    # Lê do stdin e envia ao servidor. Ao detectar EOF/CTRL-C usa `:quit`.
     while not sair.is_set():
         try:
             texto = input()
@@ -33,6 +38,7 @@ def thread_enviar(sock):
         if sair.is_set():
             break
 
+        # Envia linha terminada com '\n' para facilitar parsing no servidor
         try:
             sock.sendall((texto + "\n").encode(ENCODING))
         except OSError as erro:
@@ -40,12 +46,15 @@ def thread_enviar(sock):
             sair.set()
             break
 
+        # Se o usuário pediu para sair, sinaliza e para a thread
         if texto.strip() == ":quit":
             sair.set()
             break
 
 
 def thread_receber(sock):
+    # Recebe linhas completas do socket e imprime. Se o servidor fechar
+    # a conexão, `receber_linha` retorna None e a thread encerra.
     while not sair.is_set():
         try:
             linha = receber_linha(sock)
@@ -56,10 +65,12 @@ def thread_receber(sock):
             break
 
         if linha is None:
+            # Servidor fechou a conexão
             print("Conexao encerrada pelo servidor.")
             sair.set()
             break
 
+        # Linha recebida: exibe no terminal
         print(linha)
 
 
@@ -89,13 +100,17 @@ def main():
 
     print(boas_vindas)
 
+    # Inicia threads de envio e recebimento; `daemon=True` permite que o
+    # programa termine caso o thread principal saia.
     t1 = threading.Thread(target=thread_enviar, args=(cliente,), daemon=True)
     t2 = threading.Thread(target=thread_receber, args=(cliente,), daemon=True)
     t1.start()
     t2.start()
 
+    # Espera até que alguma thread sinalize `sair`.
     sair.wait()
 
+    # Tenta finalizar a conexão ordenadamente e fecha o socket.
     try:
         cliente.shutdown(socket.SHUT_RDWR)
     except OSError:
