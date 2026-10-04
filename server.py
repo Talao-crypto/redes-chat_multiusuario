@@ -1,6 +1,7 @@
 import socket
 import threading
 import queue
+import sys
 from datetime import datetime
 HOST = "127.0.0.1"
 PORT = 5051
@@ -125,11 +126,27 @@ def thread_processamento(cliente):
                     f"{item['conteudo']}\n"
                 )
 
-                enviar(
-                    cliente.conexao,
-                    cliente.lock_envio,
-                    texto_formatado
-                )
+                with lock_clientes:
+
+                    destinos = list(clientes)
+
+                for destino in destinos:
+
+                    if destino is cliente:
+
+                        continue
+
+                    try:
+
+                        enviar(
+                            destino.conexao,
+                            destino.lock_envio,
+                            texto_formatado
+                        )
+
+                    except OSError:
+
+                        pass
 
                 enviar(
                     cliente.conexao,
@@ -204,18 +221,42 @@ def thread_relogio(cliente, intervalo=60):
 
 #FASE 2 (TUDO Q O SERVIDOR PRECISA FAZER PARA ATENDER 1 CLIENTE)
 
-def atender_cliente(cliente):
+def atender_cliente(cliente, max_clientes):
 
     conexao = cliente.conexao
     endereco = cliente.endereco
 
     print(f"Cliente conectado: {endereco}")
 
-    # Adiciona o cliente à lista global
+    # Verifica o limite e adiciona o cliente à lista global (atomicamente)
 
     with lock_clientes:
 
-        clientes.append(cliente)
+        cheio = len(clientes) >= max_clientes
+
+        if not cheio:
+
+            clientes.append(cliente)
+
+    # Limite atingido: avisa, fecha a conexão e encerra este worker
+
+    if cheio:
+
+        try:
+
+            enviar(
+                conexao,
+                cliente.lock_envio,
+                "Limite de clientes atingido\n"
+            )
+
+        except OSError:
+
+            pass
+
+        conexao.close()
+
+        return
 
     # Envia mensagem inicial
 
@@ -283,6 +324,8 @@ def atender_cliente(cliente):
 
 def main():
 
+    max_clientes = int(sys.argv[1])
+
     servidor = socket.socket(
         socket.AF_INET,
         socket.SOCK_STREAM
@@ -309,7 +352,7 @@ def main():
 
             thread_cliente = threading.Thread(
                 target=atender_cliente,
-                args=(cliente,)
+                args=(cliente, max_clientes)
             )
 
             thread_cliente.start()
