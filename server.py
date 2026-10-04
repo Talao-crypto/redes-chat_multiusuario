@@ -324,16 +324,36 @@ def atender_cliente(cliente, max_clientes):
 
 def main():
 
-    max_clientes = int(sys.argv[1])
+    try:
 
-    servidor = socket.socket(
-        socket.AF_INET,
-        socket.SOCK_STREAM
-    )
+        max_clientes = int(sys.argv[1])
 
-    servidor.bind((HOST, PORT))
+    except (IndexError, ValueError):
 
-    servidor.listen()
+        print("Uso: python3 server.py <max_clientes>")
+        return
+
+    servidor = None
+
+    try:
+
+        servidor = socket.socket(
+            socket.AF_INET,
+            socket.SOCK_STREAM
+        )
+
+        servidor.bind((HOST, PORT))
+
+        servidor.listen()
+
+    except OSError:
+
+        print("Nao foi possivel iniciar o servidor")
+
+        if servidor is not None:
+            servidor.close()
+
+        return
 
     print("Servidor iniciado")
 
