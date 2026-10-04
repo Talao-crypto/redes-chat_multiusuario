@@ -108,7 +108,10 @@ def main():
     t2.start()
 
     # Espera até que alguma thread sinalize `sair`.
-    sair.wait()
+    try:
+        sair.wait()
+    except KeyboardInterrupt:
+        pass
 
     # Tenta finalizar a conexão ordenadamente e fecha o socket.
     try:
