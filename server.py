@@ -2,6 +2,7 @@ import socket
 import threading
 import queue
 import sys
+import time
 from datetime import datetime
 HOST = "127.0.0.1"
 PORT = 5051
@@ -26,7 +27,6 @@ class Cliente:
         # Threads deste cliente
         self.thread_recepcao = None
         self.thread_processamento = None
-        self.thread_relogio = None
 
 
 clientes = []
@@ -107,9 +107,41 @@ def thread_recepcao(cliente):
 
 def thread_processamento(cliente):
 
+    ultimo_relogio = time.monotonic()
+
     while not cliente.evento_sair.is_set():
 
-        item = cliente.fila.get()
+        try:
+
+            item = cliente.fila.get(timeout=1)
+
+        except queue.Empty:
+
+            item = None
+
+        # Envia a hora a cada 60 segundos, mesmo sem mensagens
+
+        if time.monotonic() - ultimo_relogio >= 60:
+
+            ultimo_relogio = time.monotonic()
+
+            try:
+
+                enviar(
+                    cliente.conexao,
+                    cliente.lock_envio,
+                    hora_atual() + "\n"
+                )
+
+            except OSError:
+
+                cliente.evento_sair.set()
+
+                break
+
+        if item is None:
+
+            continue
 
         try:
 
@@ -192,33 +224,6 @@ def thread_processamento(cliente):
             break
 
 
-def thread_relogio(cliente, intervalo=60):
-
-    while not cliente.evento_sair.is_set():
-
-        interrompido = cliente.evento_sair.wait(
-            timeout=intervalo
-        )
-
-        if interrompido:
-
-            break
-
-        try:
-
-            enviar(
-                cliente.conexao,
-                cliente.lock_envio,
-                hora_atual() + "\n"
-            )
-
-        except OSError:
-
-            cliente.evento_sair.set()
-
-            break
-
-
 #FASE 2 (TUDO Q O SERVIDOR PRECISA FAZER PARA ATENDER 1 CLIENTE)
 
 def atender_cliente(cliente, max_clientes):
@@ -284,22 +289,15 @@ def atender_cliente(cliente, max_clientes):
         args=(cliente,)
     )
 
-    cliente.thread_relogio = threading.Thread(
-        target=thread_relogio,
-        args=(cliente,)
-    )
-
     # Inicia as threads
 
     cliente.thread_recepcao.start()
     cliente.thread_processamento.start()
-    cliente.thread_relogio.start()
 
     # Aguarda as threads terminarem
 
     cliente.thread_recepcao.join()
     cliente.thread_processamento.join()
-    cliente.thread_relogio.join()
 
     # Remove o cliente da lista
 
